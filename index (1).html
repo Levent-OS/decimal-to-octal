@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geometrik Alan Hesaplayıcı</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-void: #06060c;
+      --bg-deep: #0c0c18;
+      --bg-surface: #111122;
+      --bg-card: #161630;
+      --bg-input: #1a1a38;
+      --bg-input-focus: #1e1e42;
+      --accent-1: #7c5cff;
+      --accent-2: #ff6b9d;
+      --accent-3: #00d4aa;
+      --accent-4: #ffa94d;
+      --accent-5: #4dc9f6;
+      --accent-6: #f7dc6f;
+      --text-bright: #f0f0ff;
+      --text-primary: #c8c8e0;
+      --text-secondary: #7878a0;
+      --text-muted: #4a4a6a;
+      --border: rgba(124, 92, 255, 0.08);
+      --border-active: rgba(124, 92, 255, 0.25);
+      --glow: rgba(124, 92, 255, 0.15);
+      --radius: 20px;
+      --radius-sm: 14px;
+      --radius-xs: 10px;
+    }
+
+    html { height: 100%; }
+
+    body {
+      min-height: 100%;
+      font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg-void);
+      color: var(--text-primary);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 50% 30% at 20% 10%, rgba(124, 92, 255, 0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 40% at 80% 80%, rgba(255, 107, 157, 0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 35% 25% at 60% 40%, rgba(0, 212, 170, 0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+      animation: fadeDown 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(124, 92, 255, 0.08);
+      border: 1px solid rgba(124, 92, 255, 0.15);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent-1);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .header-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-3);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .header h1 {
+      font-size: 42px;
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -1px;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .header h1 span {
+      background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 800px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .header h1 { font-size: 28px; }
+      .shape-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.1s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      padding: 24px 24px 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-xs);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+    .card-body { padding: 24px; }
+
+    /* ── Shape Selector ── */
+    .shape-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .shape-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 8px;
+      background: var(--bg-card);
+      border: 2px solid transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .shape-btn:hover { background: var(--bg-input); border-color: rgba(124,92,255,0.1); color: var(--text-primary); }
+
+    .shape-btn.active { border-color: var(--accent-1); background: rgba(124,92,255,0.08); color: var(--accent-1); }
+
+    .shape-btn svg { width: 36px; height: 36px; opacity: 0.6; transition: opacity 0.2s; }
+    .shape-btn.active svg, .shape-btn:hover svg { opacity: 1; }
+
+    /* ── Inputs ── */
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; }
+
+    .input-row { display: flex; gap: 12px; }
+
+    .input-wrap { flex: 1; position: relative; }
+
+    .input-wrap input {
+      width: 100%;
+      height: 48px;
+      padding: 0 50px 0 16px;
+      background: var(--bg-input);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-xs);
+      color: var(--text-bright);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .input-wrap input:focus { border-color: var(--accent-1); background: var(--bg-input-focus); box-shadow: 0 0 0 3px var(--glow); }
+    .input-wrap input::placeholder { color: var(--text-muted); font-family: 'Space Grotesk', sans-serif; }
+
+    .input-unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--text-muted); pointer-events: none; }
+
+    /* ── Buttons ── */
+    .calc-btn {
+      width: 100%;
+      height: 52px;
+      margin-top: 20px;
+      background: linear-gradient(135deg, var(--accent-1), #9b59ff);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: white;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 24px rgba(124,92,255,0.3);
+    }
+
+    .calc-btn:hover { box-shadow: 0 6px 32px rgba(124,92,255,0.45); transform: translateY(-1px); }
+    .calc-btn:active { transform: scale(0.98); }
+
+    /* ── Result ── */
+    .result-box {
+      margin-top: 20px;
+      padding: 20px;
+      background: rgba(124,92,255,0.06);
+      border: 1px solid rgba(124,92,255,0.12);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      display: none;
+    }
+
+    .result-box.visible { display: block; animation: fadeUp 0.4s ease both; }
+
+    .result-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .result-value { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 500; color: var(--accent-1); }
+    .result-unit { font-size: 18px; color: var(--text-secondary); margin-left: 4px; }
+    .result-formula { margin-top: 12px; font-size: 13px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+    /* ── Preview ── */
+    .preview-area {
+      width: 100%;
+      aspect-ratio: 1;
+      max-height: 320px;
+      background: var(--bg-card);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preview-area::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(124,92,255,0.06) 1px, transparent 1px);
+      background-size: 20px 20px;
+      opacity: 0.5;
+    }
+
+    .preview-area svg { position: relative; z-index: 1; max-width: 80%; max-height: 80%; filter: drop-shadow(0 0 20px rgba(124,92,255,0.2)); }
+
+    /* ── History Table ── */
+    .history-card { grid-column: 1 / -1; animation-delay: 0.2s; }
+
+    .history-table { width: 100%; border-collapse: collapse; }
+    .history-table thead th { padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .history-table tbody td { padding: 14px 16px; font-size: 14px; color: var(--text-primary); border-bottom: 1px solid rgba(255,255,255,0.02); white-space: nowrap; }
+    .history-table tbody tr { transition: background 0.15s; }
+    .history-table tbody tr:hover { background: rgba(124,92,255,0.03); }
+    .history-table .mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+    .shape-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+    .tag-kare { background: rgba(124,92,255,0.1); color: var(--accent-1); }
+    .tag-dikdortgen { background: rgba(255,107,157,0.1); color: var(--accent-2); }
+    .tag-ucgen { background: rgba(0,212,170,0.1); color: var(--accent-3); }
+    .tag-daire { background: rgba(255,169,77,0.1); color: var(--accent-4); }
+    .tag-paralelkenar { background: rgba(77,201,246,0.1); color: var(--accent-5); }
+    .tag-yamuk { background: rgba(247,220,111,0.1); color: var(--accent-6); }
+
+    .ip-cell { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+    .empty-state .empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.3; }
+    .empty-state p { font-size: 14px; line-height: 1.6; }
+
+    .status-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .status-dot.online { background: var(--accent-3); }
+    .status-dot.offline { background: var(--accent-2); }
+
+    .table-scroll { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+    .table-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .table-scroll::-webkit-scrollbar-track { background: transparent; }
+    .table-scroll::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 3px; }
+
+    /* ── Config Panel ── */
+    .config-panel { background: var(--bg-card); border: 1px dashed rgba(124,92,255,0.2); border-radius: var(--radius-sm); padding: 20px; margin-bottom: 24px; }
+    .config-panel summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent-1); list-style: none; display: flex; align-items: center; gap: 8px; }
+    .config-panel summary::-webkit-details-marker { display: none; }
+    .config-panel[open] summary { margin-bottom: 16px; }
+
+    .config-inputs { display: flex; flex-direction: column; gap: 12px; }
+    .config-inputs input { width: 100%; height: 42px; padding: 0 14px; background: var(--bg-input); border: 1.5px solid var(--border); border-radius: var(--radius-xs); color: var(--text-bright); font-family: 'JetBrains Mono', monospace; font-size: 13px; outline: none; transition: all 0.2s; }
+    .config-inputs input:focus { border-color: var(--accent-1); box-shadow: 0 0 0 3px var(--glow); }
+    .config-inputs input::placeholder { color: var(--text-muted); font-family: 'Space Grotesk', sans-serif; font-size: 13px; }
+
+    .config-save { height: 40px; padding: 0 20px; background: rgba(124,92,255,0.15); border: 1px solid rgba(124,92,255,0.2); border-radius: var(--radius-xs); color: var(--accent-1); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .config-save:hover { background: rgba(124,92,255,0.25); }
+
+    .config-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 4px; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 20px; border-radius: var(--radius-xs); font-size: 14px; font-weight: 500; z-index: 999; transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(0.16,1,0.3,1); max-width: 360px; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: rgba(0,212,170,0.15); border: 1px solid rgba(0,212,170,0.3); color: var(--accent-3); }
+    .toast.error { background: rgba(255,107,157,0.15); border: 1px solid rgba(255,107,157,0.3); color: var(--accent-2); }
+    .toast.info { background: rgba(124,92,255,0.15); border: 1px solid rgba(124,92,255,0.3); color: var(--accent-1); }
+
+    @media (max-width: 600px) {
+      .app { padding: 24px 16px 40px; }
+      .result-value { font-size: 24px; }
+      .history-table thead th, .history-table tbody td { padding: 10px 12px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="header-badge"><span class="dot"></span> Supabase Bağlantılı</div>
+      <h1>Geometrik <span>Alan</span> Hesaplayıcı</h1>
+      <p>Şekil seçin, ölçüleri girin — alan hesaplansın ve Supabase'e kaydedilsin.</p>
+    </div>
+
+    <details class="config-panel" id="configPanel">
+      <summary>⚙ Supabase Bağlantı Ayarları</summary>
+      <div class="config-inputs">
+        <input type="text" id="cfgUrl" placeholder="Supabase Project URL (https://xxx.supabase.co)" />
+        <input type="text" id="cfgKey" placeholder="Supabase Anon Key" />
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="config-save" onclick="saveConfig()">Kaydet & Bağlan</button>
+          <button class="config-save" onclick="showSqlModal()" style="background:rgba(0,212,170,0.12);border-color:rgba(0,212,170,0.2);color:var(--accent-3);">Tablo SQL'ini Göster</button>
+        </div>
+        <p class="config-hint">Supabase Dashboard → Settings → API → URL ve anon key'i al. Aşağıdaki SQL ile tabloyu oluştur.</p>
+      </div>
+    </details>
+
+    <div class="main-grid">
+      <!-- Calculator -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(124,92,255,0.1);color:var(--accent-1);">△</div>
+          <div class="card-title">Şekil & Hesapla</div>
+        </div>
+        <div class="card-body">
+          <div class="shape-grid" id="shapeGrid">
+            <button class="shape-btn active" data-shape="kare" onclick="selectShape('kare')">
+              <svg viewBox="0 0 40 40"><rect x="4" y="4" width="32" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>Kare
+            </button>
+            <button class="shape-btn" data-shape="dikdortgen" onclick="selectShape('dikdortgen')">
+              <svg viewBox="0 0 40 40"><rect x="2" y="8" width="36" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>Dikdörtgen
+            </button>
+            <button class="shape-btn" data-shape="ucgen" onclick="selectShape('ucgen')">
+              <svg viewBox="0 0 40 40"><polygon points="20,4 36,36 4,36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>Üçgen
+            </button>
+            <button class="shape-btn" data-shape="daire" onclick="selectShape('daire')">
+              <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>Daire
+            </button>
+            <button class="shape-btn" data-shape="paralelkenar" onclick="selectShape('paralelkenar')">
+              <svg viewBox="0 0 40 40"><polygon points="10,32 34,32 30,8 6,8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>Paralelkenar
+            </button>
+            <button class="shape-btn" data-shape="yamuk" onclick="selectShape('yamuk')">
+              <svg viewBox="0 0 40 40"><polygon points="10,32 30,32 26,8 14,8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>Yamuk
+            </button>
+          </div>
+          <div id="inputArea"></div>
+          <button class="calc-btn" onclick="calculate()">Hesapla & Kaydet</button>
+          <div class="result-box" id="resultBox">
+            <div class="result-label">Hesaplanan Alan</div>
+            <div class="result-value" id="resultValue">0<span class="result-unit">cm²</span></div>
+            <div class="result-formula" id="resultFormula"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(0,212,170,0.1);color:var(--accent-3);">◇</div>
+          <div class="card-title">Önizleme</div>
+        </div>
+        <div class="card-body">
+          <div class="preview-area"><svg id="previewSvg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"></svg></div>
+          <div id="dimensionInfo" style="font-size:13px;color:var(--text-secondary);text-align:center;"></div>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="card history-card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(255,169,77,0.1);color:var(--accent-4);">⟳</div>
+          <div class="card-title">İşlem Geçmişi</div>
+        </div>
+        <div class="table-scroll">
+          <table class="history-table">
+            <thead><tr><th>Zaman</th><th>Şekil</th><th>Parametreler</th><th>Alan</th><th>Formül</th><th>IP</th></tr></thead>
+            <tbody id="historyBody">
+              <tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◌</div><p>Henüz hesaplama yapılmadı.<br>Supabase bağlantısını kurup hesaplama yapın.</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="status-bar">
+          <span><span class="status-dot" id="statusDot"></span><span id="statusText">Bağlantı bekleniyor...</span></span>
+          <span id="recordCount">0 kayıt</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- SQL Modal -->
+  <div id="sqlModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;max-width:640px;width:90%;max-height:80vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <span style="font-size:16px;font-weight:600;color:var(--text-bright);">Supabase SQL — Tablo Oluşturma</span>
+        <button onclick="closeSqlModal()" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:20px;">✕</button>
+      </div>
+      <pre id="sqlCode" style="background:var(--bg-card);padding:20px;border-radius:var(--radius-xs);font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent-3);line-height:1.7;overflow-x:auto;white-space:pre-wrap;"></pre>
+      <button onclick="copySql()" style="margin-top:12px;padding:10px 20px;background:rgba(0,212,170,0.12);border:1px solid rgba(0,212,170,0.2);color:var(--accent-3);border-radius:var(--radius-xs);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;">Kopyala</button>
+    </div>
+  </div>
+
+  <script>
+    let currentShape = 'kare';
+    let sb = null;
+    let userIP = '';
+
+    const shapes = {
+      kare: {
+        label: 'Kare', tag: 'tag-kare',
+        inputs: [{ key: 'a', label: 'Kenar (a)', ph: 'cm' }],
+        calc: v => v.a * v.a,
+        formula: v => `a² = ${v.a}² = ${(v.a * v.a).toFixed(2)}`,
+        preview: v => {
+          const s = clamp(v.a * 10, 60, 160), x = 100 - s/2, y = 100 - s/2;
+          return `<rect x="${x}" y="${y}" width="${s}" height="${s}" rx="4" fill="rgba(124,92,255,0.12)" stroke="#7c5cff" stroke-width="2.5"/>
+            <text x="100" y="${y-8}" text-anchor="middle" fill="#7c5cff" font-size="13" font-family="JetBrains Mono">${v.a} cm</text>`;
+        }
+      },
+      dikdortgen: {
+        label: 'Dikdörtgen', tag: 'tag-dikdortgen',
+        inputs: [{ key: 'a', label: 'Uzun Kenar (a)', ph: 'cm' }, { key: 'b', label: 'Kısa Kenar (b)', ph: 'cm' }],
+        calc: v => v.a * v.b,
+        formula: v => `a × b = ${v.a} × ${v.b} = ${(v.a * v.b).toFixed(2)}`,
+        preview: v => {
+          const w = clamp(v.a * 8, 80, 170), h = clamp(v.b * 8, 40, 130), x = 100 - w/2, y = 100 - h/2;
+          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="rgba(255,107,157,0.1)" stroke="#ff6b9d" stroke-width="2.5"/>
+            <text x="100" y="${y-8}" text-anchor="middle" fill="#ff6b9d" font-size="13" font-family="JetBrains Mono">${v.a} cm</text>
+            <text x="${x+w+8}" y="104" text-anchor="start" fill="#ff6b9d" font-size="13" font-family="JetBrains Mono">${v.b}</text>`;
+        }
+      },
+      ucgen: {
+        label: 'Üçgen', tag: 'tag-ucgen',
+        inputs: [{ key: 'base', label: 'Taban (a)', ph: 'cm' }, { key: 'h', label: 'Yükseklik (h)', ph: 'cm' }],
+        calc: v => (v.base * v.h) / 2,
+        formula: v => `(a×h)/2 = (${v.base}×${v.h})/2 = ${((v.base * v.h) / 2).toFixed(2)}`,
+        preview: v => {
+          const bw = clamp(v.base * 8, 60, 160), bh = clamp(v.h * 8, 40, 140), cx = 100, by = 100 + bh/2;
+          return `<polygon points="${cx},${by-bh} ${cx+bw/2},${by} ${cx-bw/2},${by}" fill="rgba(0,212,170,0.1)" stroke="#00d4aa" stroke-width="2.5" stroke-linejoin="round"/>
+            <text x="${cx}" y="${by+18}" text-anchor="middle" fill="#00d4aa" font-size="13" font-family="JetBrains Mono">${v.base} cm</text>
+            <line x1="${cx}" y1="${by-bh}" x2="${cx}" y2="${by}" stroke="#00d4aa" stroke-width="1" stroke-dasharray="4,4" opacity="0.4"/>
+            <text x="${cx+10}" y="${100+4}" text-anchor="start" fill="#00d4aa" font-size="11" font-family="JetBrains Mono">h=${v.h}</text>`;
+        }
+      },
+      daire: {
+        label: 'Daire', tag: 'tag-daire',
+        inputs: [{ key: 'r', label: 'Yarıçap (r)', ph: 'cm' }],
+        calc: v => Math.PI * v.r * v.r,
+        formula: v => `π×r² = π×${v.r}² = ${(Math.PI * v.r * v.r).toFixed(2)}`,
+        preview: v => {
+          const r = clamp(v.r * 8, 25, 80);
+          return `<circle cx="100" cy="100" r="${r}" fill="rgba(255,169,77,0.1)" stroke="#ffa94d" stroke-width="2.5"/>
+            <line x1="100" y1="100" x2="${100+r}" y2="100" stroke="#ffa94d" stroke-width="1.5" stroke-dasharray="4,4"/>
+            <text x="${100+r/2}" y="92" text-anchor="middle" fill="#ffa94d" font-size="13" font-family="JetBrains Mono">r=${v.r}</text>`;
+        }
+      },
+      paralelkenar: {
+        label: 'Paralelkenar', tag: 'tag-paralelkenar',
+        inputs: [{ key: 'base', label: 'Taban (a)', ph: 'cm' }, { key: 'h', label: 'Yükseklik (h)', ph: 'cm' }],
+        calc: v => v.base * v.h,
+        formula: v => `a×h = ${v.base}×${v.h} = ${(v.base * v.h).toFixed(2)}`,
+        preview: v => {
+          const w = clamp(v.base * 8, 60, 150), h = clamp(v.h * 8, 30, 100), off = 25, cx = 100, by = 100 + h/2;
+          return `<polygon points="${cx-w/2+off},${by-h} ${cx+w/2+off},${by-h} ${cx+w/2-off},${by} ${cx-w/2-off},${by}" fill="rgba(77,201,246,0.1)" stroke="#4dc9f6" stroke-width="2.5" stroke-linejoin="round"/>
+            <text x="${cx}" y="${by+18}" text-anchor="middle" fill="#4dc9f6" font-size="13" font-family="JetBrains Mono">${v.base} cm</text>`;
+        }
+      },
+      yamuk: {
+        label: 'Yamuk', tag: 'tag-yamuk',
+        inputs: [{ key: 'a', label: 'Üst Taban (a)', ph: 'cm' }, { key: 'b', label: 'Alt Taban (b)', ph: 'cm' }, { key: 'h', label: 'Yükseklik (h)', ph: 'cm' }],
+        calc: v => ((v.a + v.b) / 2) * v.h,
+        formula: v => `(a+b)/2×h = (${v.a}+${v.b})/2×${v.h} = ${(((v.a + v.b) / 2) * v.h).toFixed(2)}`,
+        preview: v => {
+          const tw = clamp(v.a * 6, 30, 100), bw = clamp(v.b * 6, 60, 160), h = clamp(v.h * 8, 30, 100), cx = 100, by = 100 + h/2;
+          return `<polygon points="${cx-tw/2},${by-h} ${cx+tw/2},${by-h} ${cx+bw/2},${by} ${cx-bw/2},${by}" fill="rgba(247,220,111,0.1)" stroke="#f7dc6f" stroke-width="2.5" stroke-linejoin="round"/>
+            <text x="${cx}" y="${by-h-8}" text-anchor="middle" fill="#f7dc6f" font-size="12" font-family="JetBrains Mono">a=${v.a}</text>
+            <text x="${cx}" y="${by+18}" text-anchor="middle" fill="#f7dc6f" font-size="12" font-family="JetBrains Mono">b=${v.b}</text>`;
+        }
+      }
+    };
+
+    const SQL_CREATE = `-- Supabase SQL Editor'de çalıştırın:
+
+CREATE TABLE IF NOT EXISTS geometri_hesaplamalar (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  sekil         TEXT NOT NULL,
+  parametreler  JSONB NOT NULL,
+  alan          DOUBLE PRECISION NOT NULL,
+  formul        TEXT NOT NULL,
+  ip_adres      TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Row Level Security
+ALTER TABLE geometri_hesaplamalar ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Herkes okuyabilir"
+  ON geometri_hesaplamalar FOR SELECT USING (true);
+
+CREATE POLICY "Herkes yazabilir"
+  ON geometri_hesaplamalar FOR INSERT WITH CHECK (true);
+
+CREATE INDEX idx_geometri_created
+  ON geometri_hesaplamalar(created_at DESC);`;
+
+    function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
+
+    // ── Init ──
+    window.addEventListener('DOMContentLoaded', () => {
+      loadConfig();
+      selectShape('kare');
+      fetchIP();
+    });
+
+    async function fetchIP() {
+      try {
+        const r = await fetch('https://api.ipify.org?format=json');
+        userIP = (await r.json()).ip;
+      } catch { userIP = 'bilinmiyor'; }
+    }
+
+    // ── Supabase Config ──
+    function loadConfig() {
+      const url = localStorage.getItem('sb_url') || '';
+      const key = localStorage.getItem('sb_key') || '';
+      document.getElementById('cfgUrl').value = url;
+      document.getElementById('cfgKey').value = key;
+      if (url && key) initSupabase(url, key);
+      else setStatus(false);
+    }
+
+    function saveConfig() {
+      const url = document.getElementById('cfgUrl').value.trim();
+      const key = document.getElementById('cfgKey').value.trim();
+      if (!url || !key) { toast('URL ve Key gerekli.', 'error'); return; }
+      localStorage.setItem('sb_url', url);
+      localStorage.setItem('sb_key', key);
+      initSupabase(url, key);
+      document.getElementById('configPanel').removeAttribute('open');
+      toast('Supabase bağlantısı kaydedildi!', 'success');
+    }
+
+    function initSupabase(url, key) {
+      try {
+        sb = window.supabase.createClient(url, key);
+        setStatus(true);
+        loadHistory();
+      } catch (e) {
+        setStatus(false);
+        toast('Bağlantı hatası: ' + e.message, 'error');
+      }
+    }
+
+    function setStatus(online) {
+      document.getElementById('statusDot').className = 'status-dot ' + (online ? 'online' : 'offline');
+      document.getElementById('statusText').textContent = online ? 'Supabase bağlı' : 'Bağlantı yok';
+    }
+
+    // ── Shape ──
+    function selectShape(shape) {
+      currentShape = shape;
+      document.querySelectorAll('.shape-btn').forEach(b => b.classList.toggle('active', b.dataset.shape === shape));
+      renderInputs();
+      updatePreviewDefault();
+      document.getElementById('resultBox').classList.remove('visible');
+    }
+
+    function renderInputs() {
+      const cfg = shapes[currentShape];
+      const useRow = cfg.inputs.length === 2 && currentShape !== 'yamuk';
+      let html = useRow ? '<div class="input-row">' : '';
+      cfg.inputs.forEach(inp => {
+        html += `<div class="${useRow ? 'input-wrap' : 'input-group'}">
+          ${useRow ? '' : '<div class="input-wrap">'}
+          <label>${inp.label}</label>
+          <input type="number" id="inp_${inp.key}" placeholder="0" min="0" step="any" oninput="livePreview()"/>
+          <span class="input-unit">${inp.ph}</span>
+          ${useRow ? '' : '</div>'}
+        </div>`;
+      });
+      if (useRow) html += '</div>';
+      document.getElementById('inputArea').innerHTML = html;
+    }
+
+    function getValues() {
+      const cfg = shapes[currentShape];
+      const vals = {};
+      let valid = true;
+      cfg.inputs.forEach(inp => {
+        const v = parseFloat(document.getElementById('inp_' + inp.key)?.value);
+        if (!v || v <= 0) valid = false;
+        vals[inp.key] = v || 0;
+      });
+      return { vals, valid };
+    }
+
+    // ── Preview ──
+    const defaults = { kare:{a:8}, dikdortgen:{a:12,b:7}, ucgen:{base:10,h:8}, daire:{r:7}, paralelkenar:{base:10,h:6}, yamuk:{a:6,b:12,h:7} };
+
+    function updatePreviewDefault() {
+      document.getElementById('previewSvg').innerHTML = shapes[currentShape].preview(defaults[currentShape]);
+      document.getElementById('dimensionInfo').textContent = '';
+    }
+
+    function livePreview() {
+      const { vals, valid } = getValues();
+      if (!valid) { updatePreviewDefault(); return; }
+      document.getElementById('previewSvg').innerHTML = shapes[currentShape].preview(vals);
+      document.getElementById('dimensionInfo').textContent = `Alan ≈ ${shapes[currentShape].calc(vals).toFixed(2)} cm²`;
+    }
+
+    // ── Calculate ──
+    async function calculate() {
+      const { vals, valid } = getValues();
+      if (!valid) { toast('Lütfen tüm ölçüleri girin.', 'error'); return; }
+
+      const cfg = shapes[currentShape];
+      const area = cfg.calc(vals);
+      const formula = cfg.formula(vals);
+
+      document.getElementById('resultValue').innerHTML = `${area.toFixed(2)}<span class="result-unit">cm²</span>`;
+      document.getElementById('resultFormula').textContent = formula;
+      document.getElementById('resultBox').classList.add('visible');
+
+      if (sb) {
+        try {
+          const { error } = await sb.from('geometri_hesaplamalar').insert({
+            sekil: cfg.label,
+            parametreler: vals,
+            alan: parseFloat(area.toFixed(4)),
+            formul: formula,
+            ip_adres: userIP || 'bilinmiyor'
+          });
+          if (error) throw error;
+          toast('Supabase\'e kaydedildi!', 'success');
+          loadHistory();
+        } catch (e) { toast('Kayıt hatası: ' + e.message, 'error'); }
+      } else {
+        toast('Supabase bağlı değil — sonuç sadece ekranda.', 'info');
+      }
+    }
+
+    // ── History ──
+    async function loadHistory() {
+      if (!sb) return;
+      try {
+        const { data, error } = await sb.from('geometri_hesaplamalar').select('*').order('created_at', { ascending: false }).limit(50);
+        if (error) throw error;
+
+        document.getElementById('recordCount').textContent = `${data.length} kayıt`;
+        const tbody = document.getElementById('historyBody');
+
+        if (!data.length) {
+          tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◌</div><p>Henüz kayıt yok.</p></div></td></tr>`;
+          return;
+        }
+
+        const tagMap = { 'Kare':'tag-kare','Dikdörtgen':'tag-dikdortgen','Üçgen':'tag-ucgen','Daire':'tag-daire','Paralelkenar':'tag-paralelkenar','Yamuk':'tag-yamuk' };
+
+        tbody.innerHTML = data.map(r => {
+          const t = new Date(r.created_at).toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+          const p = typeof r.parametreler === 'string' ? JSON.parse(r.parametreler) : r.parametreler;
+          const ps = Object.entries(p).map(([k,v]) => `${k}=${v}`).join(', ');
+          return `<tr>
+            <td class="mono">${t}</td>
+            <td><span class="shape-tag ${tagMap[r.sekil]||'tag-kare'}">${r.sekil}</span></td>
+            <td class="mono">${ps}</td>
+            <td class="mono" style="color:var(--accent-1);font-weight:500;">${r.alan} cm²</td>
+            <td class="mono" style="font-size:12px;color:var(--text-secondary);">${r.formul}</td>
+            <td class="ip-cell">${r.ip_adres || '—'}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) { console.error('History error:', e); }
+    }
+
+    // ── SQL Modal ──
+    function showSqlModal() {
+      document.getElementById('sqlCode').textContent = SQL_CREATE;
+      document.getElementById('sqlModal').style.display = 'flex';
+    }
+    function closeSqlModal() { document.getElementById('sqlModal').style.display = 'none'; }
+    function copySql() { navigator.clipboard.writeText(SQL_CREATE).then(() => toast('SQL kopyalandı!', 'success')); }
+
+    // ── Toast ──
+    function toast(msg, type = 'info') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast ' + type;
+      setTimeout(() => el.classList.add('show'), 10);
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+  </script>
+</body>
+</html>
