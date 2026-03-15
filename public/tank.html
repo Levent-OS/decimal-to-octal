@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tank Detay — Developardus IoT</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+</head>
+<body>
+  <div class="shell">
+    <div id="sidebarMount"></div>
+    <div class="main">
+      <div id="topbarMount"></div>
+      <div class="content">
+
+        <!-- Device Header -->
+        <div class="card fade-in" style="margin-bottom:20px;">
+          <div class="card-body" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+            <div id="tankGauge"></div>
+            <div style="flex:1;min-width:200px;">
+              <h2 style="font-size:22px;font-weight:600;color:var(--t1);margin-bottom:6px;" id="deviceTitle">Yükleniyor...</h2>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--t3);">
+                <span id="deviceId">—</span>
+                <span id="deviceStatus">—</span>
+                <span id="deviceLastSeen">—</span>
+              </div>
+              <div style="display:flex;gap:16px;margin-top:16px;" id="deviceMeta"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-grid fade-in stagger-1" id="tankStats"></div>
+
+        <!-- Chart -->
+        <div class="card fade-in stagger-2" style="margin-bottom:20px;">
+          <div class="card-header">
+            <div class="card-title">📊 Seviye Geçmişi</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="loadChart(6)">6 Sa</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadChart(24)">24 Sa</button>
+              <button class="btn btn-ghost btn-sm" onclick="loadChart(168)">7 Gün</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-container"><canvas id="levelChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid-2 fade-in stagger-3">
+          <!-- Config -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚙ Tank Konfigürasyon</div>
+              <button class="btn btn-primary btn-sm" onclick="saveConfig()">Kaydet</button>
+            </div>
+            <div class="card-body" id="configArea">
+              <div class="empty"><p>Yükleniyor...</p></div>
+            </div>
+          </div>
+
+          <!-- Recent Readings -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📋 Son Okumalar</div>
+            </div>
+            <div class="card-body no-pad">
+              <div class="table-wrap" style="max-height:360px;overflow-y:auto;">
+                <table>
+                  <thead><tr><th>Zaman</th><th>Seviye</th><th>Ham</th><th>Sıcaklık</th><th>Batarya</th></tr></thead>
+                  <tbody id="readingsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="globalToast"></div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    if (!initPage('tank', 'Tank Detay')) throw 'auth';
+
+    const params = new URLSearchParams(window.location.search);
+    const deviceId = params.get('id');
+    let levelChart = null;
+
+    if (!deviceId) {
+      document.querySelector('.content').innerHTML = `
+        <div class="card"><div class="card-body empty">
+          <div class="empty-icon">▧</div>
+          <p>Cihaz seçilmedi. <a href="/" style="color:var(--accent);">Dashboard'a dön</a></p>
+        </div></div>`;
+    } else {
+      loadPageData();
+      setInterval(loadPageData, 30000);
+    }
+
+    async function loadPageData() {
+      await Promise.all([loadDevice(), loadReadings(), loadChart(24), loadConfig()]);
+    }
+
+    async function loadDevice() {
+      const { data: device } = await sb.from('devices').select('*, tank_configs(*)').eq('device_id', deviceId).single();
+      if (!device) return;
+
+      const { data: latest } = await sb.from('readings').select('*').eq('device_id', deviceId).order('created_at', { ascending: false }).limit(1).single();
+
+      const online = isOnline(device.last_seen);
+      const pct = latest?.level_percent ?? 0;
+
+      document.getElementById('deviceTitle').textContent = device.name || device.device_id;
+      document.getElementById('deviceId').textContent = `📟 ${device.device_id}`;
+      document.getElementById('deviceStatus').innerHTML = `<span class="tag ${online ? 'tag-ok' : 'tag-offline'}">${online ? 'Çevrimiçi' : 'Çevrimdışı'}</span>`;
+      document.getElementById('deviceLastSeen').textContent = `🕐 Son: ${timeAgo(device.last_seen)}`;
+
+      document.getElementById('tankGauge').innerHTML = `
+        <div style="text-align:center;">
+          <div class="tank-bar-wrap" style="width:80px;height:160px;">
+            <div class="tank-bar-fill" style="height:${pct}%;background:${levelColor(pct)};opacity:0.7;"></div>
+            <div class="tank-bar-label" style="font-size:18px;">${pct}%</div>
+          </div>
+        </div>`;
+
+      document.getElementById('deviceMeta').innerHTML = `
+        <span class="mono" style="font-size:13px;color:var(--t2);">📏 ${latest?.level_cm ?? '—'} cm</span>
+        <span class="mono" style="font-size:13px;color:var(--t2);">🌡 ${latest?.temperature ?? '—'}°C</span>
+        <span class="mono" style="font-size:13px;color:var(--t2);">🔋 ${latest?.battery_voltage ?? '—'}V</span>
+        <span class="mono" style="font-size:13px;color:var(--t2);">📶 ${latest?.rssi ?? '—'} dBm</span>
+      `;
+
+      document.getElementById('tankStats').innerHTML = `
+        <div class="stat-box accent"><div class="stat-label">Seviye</div><div class="stat-value">${pct}%</div><div class="stat-sub">${latest?.level_cm ?? '—'} cm</div></div>
+        <div class="stat-box info"><div class="stat-label">Sıcaklık</div><div class="stat-value">${latest?.temperature ?? '—'}°</div><div class="stat-sub">Celsius</div></div>
+        <div class="stat-box warn"><div class="stat-label">Batarya</div><div class="stat-value">${latest?.battery_voltage ?? '—'}</div><div class="stat-sub">Volt</div></div>
+        <div class="stat-box ${online ? 'accent' : 'danger'}"><div class="stat-label">Durum</div><div class="stat-value" style="font-size:18px;">${online ? 'Çevrimiçi' : 'Çevrimdışı'}</div><div class="stat-sub">${timeAgo(device.last_seen)}</div></div>
+      `;
+    }
+
+    async function loadReadings() {
+      const { data } = await sb.from('readings').select('*').eq('device_id', deviceId).order('created_at', { ascending: false }).limit(30);
+      const tbody = document.getElementById('readingsBody');
+      if (!data?.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:20px;">Veri yok</td></tr>'; return; }
+
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td class="mono" style="font-size:12px;">${formatDate(r.created_at)}</td>
+          <td><span class="tag ${r.level_percent <= 10 ? 'tag-danger' : r.level_percent <= 25 ? 'tag-warn' : 'tag-ok'}">${r.level_percent}%</span></td>
+          <td class="mono">${r.raw_value ?? '—'}</td>
+          <td class="mono">${r.temperature ?? '—'}°C</td>
+          <td class="mono">${r.battery_voltage ?? '—'}V</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadChart(hours = 24) {
+      const since = new Date(Date.now() - hours * 3600000).toISOString();
+      const { data } = await sb.from('readings').select('level_percent, temperature, created_at').eq('device_id', deviceId).gte('created_at', since).order('created_at').limit(1000);
+      if (!data?.length) return;
+
+      const ctx = document.getElementById('levelChart');
+      if (levelChart) levelChart.destroy();
+
+      levelChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [
+            {
+              label: 'Seviye %',
+              data: data.map(r => ({ x: new Date(r.created_at), y: r.level_percent })),
+              borderColor: '#22d3a7', backgroundColor: 'rgba(34,211,167,0.08)',
+              borderWidth: 2, fill: true, tension: 0.3, pointRadius: 0, yAxisID: 'y'
+            },
+            {
+              label: 'Sıcaklık °C',
+              data: data.filter(r => r.temperature != null).map(r => ({ x: new Date(r.created_at), y: r.temperature })),
+              borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)',
+              borderWidth: 1.5, fill: false, tension: 0.3, pointRadius: 0, yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'IBM Plex Mono', size: 11 } } } },
+          scales: {
+            x: { type: 'time', grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+            y: { min: 0, max: 100, position: 'left', grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { color: '#22d3a7', callback: v => v + '%' } },
+            y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#f59e0b', callback: v => v + '°' } }
+          }
+        }
+      });
+    }
+
+    async function loadConfig() {
+      const { data: cfg } = await sb.from('tank_configs').select('*').eq('device_id', deviceId).single();
+      if (!cfg) { document.getElementById('configArea').innerHTML = '<p style="color:var(--t4);">Konfig bulunamadı</p>'; return; }
+
+      document.getElementById('configArea').innerHTML = `
+        <div class="form-group"><label class="form-label">Tank Adı</label><input type="text" id="cfgName" class="form-input" value="${cfg.tank_name || ''}"></div>
+        <div class="form-group"><label class="form-label">Tank Yüksekliği (cm)</label><input type="number" id="cfgHeight" class="form-input" value="${cfg.tank_height_cm}"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group"><label class="form-label">Raw/cm Sabiti</label><input type="number" step="0.1" id="cfgRawPerCm" class="form-input" value="${cfg.raw_per_cm}"></div>
+          <div class="form-group"><label class="form-label">Offset Raw</label><input type="number" step="0.1" id="cfgOffset" class="form-input" value="${cfg.offset_raw}"></div>
+          <div class="form-group"><label class="form-label">Alarm Alt (%)</label><input type="number" id="cfgAlertLow" class="form-input" value="${cfg.alert_low_percent}"></div>
+          <div class="form-group"><label class="form-label">Alarm Üst (%)</label><input type="number" id="cfgAlertHigh" class="form-input" value="${cfg.alert_high_percent}"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Okuma Aralığı (sn)</label><input type="number" id="cfgInterval" class="form-input" value="${cfg.read_interval_sec}"></div>
+      `;
+    }
+
+    async function saveConfig() {
+      const updates = {
+        tank_name: document.getElementById('cfgName')?.value,
+        tank_height_cm: parseFloat(document.getElementById('cfgHeight')?.value),
+        raw_per_cm: parseFloat(document.getElementById('cfgRawPerCm')?.value),
+        offset_raw: parseFloat(document.getElementById('cfgOffset')?.value),
+        alert_low_percent: parseFloat(document.getElementById('cfgAlertLow')?.value),
+        alert_high_percent: parseFloat(document.getElementById('cfgAlertHigh')?.value),
+        read_interval_sec: parseInt(document.getElementById('cfgInterval')?.value),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await sb.from('tank_configs').update(updates).eq('device_id', deviceId);
+      if (error) { showToast('Kayıt hatası: ' + error.message, 'error'); return; }
+      showToast('Konfigürasyon kaydedildi!', 'success');
+    }
+  </script>
+</body>
+</html>

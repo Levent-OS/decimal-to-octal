@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem — Developardus IoT</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="shell">
+    <div id="sidebarMount"></div>
+    <div class="main">
+      <div id="topbarMount"></div>
+      <div class="content">
+
+        <!-- Tab Buttons -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;" class="fade-in">
+          <button class="btn btn-primary btn-sm" id="tabAlerts" onclick="switchTab('alerts')">⚠ Alarmlar</button>
+          <button class="btn btn-ghost btn-sm" id="tabLogs" onclick="switchTab('logs')">📋 Loglar</button>
+          <button class="btn btn-ghost btn-sm" id="tabDevices" onclick="switchTab('devices')">📟 Cihazlar</button>
+        </div>
+
+        <!-- Alerts Tab -->
+        <div id="panelAlerts" class="fade-in stagger-1">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚠ Aktif Alarmlar</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadAlerts()">↻ Yenile</button>
+            </div>
+            <div class="card-body no-pad">
+              <div class="table-wrap" style="max-height:600px;overflow-y:auto;">
+                <table>
+                  <thead><tr><th>Zaman</th><th>Cihaz</th><th>Tip</th><th>Ciddiyet</th><th>Mesaj</th><th>İşlem</th></tr></thead>
+                  <tbody id="alertsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="panelLogs" style="display:none;" class="fade-in">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📋 Sistem Logları</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="logLevel" class="form-input" style="width:120px;height:34px;font-size:12px;" onchange="loadLogs()">
+                  <option value="">Tüm Seviyeler</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="INFO">INFO</option>
+                </select>
+                <select id="logSource" class="form-input" style="width:120px;height:34px;font-size:12px;" onchange="loadLogs()">
+                  <option value="">Tüm Kaynaklar</option>
+                  <option value="api">API</option>
+                  <option value="device">Cihaz</option>
+                  <option value="system">Sistem</option>
+                  <option value="health">Sağlık</option>
+                  <option value="storage">Depolama</option>
+                  <option value="auth">Auth</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body no-pad">
+              <div class="table-wrap" style="max-height:600px;overflow-y:auto;">
+                <table>
+                  <thead><tr><th>Zaman</th><th>Seviye</th><th>Kaynak</th><th>Mesaj</th><th>IP</th></tr></thead>
+                  <tbody id="logsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Devices Tab -->
+        <div id="panelDevices" style="display:none;" class="fade-in">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📟 Cihaz Yönetimi</div>
+            </div>
+            <div class="card-body no-pad">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>ID</th><th>Adı</th><th>Tip</th><th>Firmware</th><th>Son Görülme</th><th>Durum</th><th>API Key</th><th>İşlem</th></tr></thead>
+                  <tbody id="devicesBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="globalToast"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    if (!initPage('system', 'Sistem Yönetimi')) throw 'auth';
+
+    let currentTab = 'alerts';
+
+    function switchTab(tab) {
+      currentTab = tab;
+      ['alerts', 'logs', 'devices'].forEach(t => {
+        document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? 'block' : 'none';
+        document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).className = t === tab ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+      });
+      loadTabData(tab);
+    }
+
+    function loadTabData(tab) {
+      if (tab === 'alerts') loadAlerts();
+      else if (tab === 'logs') loadLogs();
+      else if (tab === 'devices') loadDevices();
+    }
+
+    function loadPageData() { loadTabData(currentTab); }
+
+    // ── Alerts ──
+    async function loadAlerts() {
+      const { data } = await sb.from('alerts').select('*').order('created_at', { ascending: false }).limit(100);
+      const tbody = document.getElementById('alertsBody');
+
+      if (!data?.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--t4);padding:32px;">Alarm yok ✓</td></tr>';
+        return;
+      }
+
+      const sevMap = { critical: 'tag-danger', warning: 'tag-warn', info: 'tag-info' };
+      tbody.innerHTML = data.map(a => `
+        <tr style="${a.acknowledged ? 'opacity:0.5;' : ''}">
+          <td class="mono" style="font-size:12px;">${formatDateFull(a.created_at)}</td>
+          <td class="mono">${a.device_id}</td>
+          <td class="mono" style="font-size:12px;">${a.alert_type}</td>
+          <td><span class="tag ${sevMap[a.severity] || 'tag-warn'}">${a.severity}</span></td>
+          <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;font-size:12px;">${a.message || '—'}</td>
+          <td>${a.acknowledged
+            ? `<span class="tag tag-ok" style="font-size:11px;">✓ ${formatDate(a.acknowledged_at)}</span>`
+            : `<button class="btn btn-ghost btn-sm" onclick="ackAlert(${a.id})">Onayla</button>`
+          }</td>
+        </tr>
+      `).join('');
+    }
+
+    async function ackAlert(id) {
+      const { error } = await sb.from('alerts').update({ acknowledged: true, acknowledged_at: new Date().toISOString() }).eq('id', id);
+      if (error) { showToast('Hata: ' + error.message, 'error'); return; }
+      showToast('Alarm onaylandı', 'success');
+      loadAlerts();
+      updateAlertBadge();
+    }
+
+    // ── Logs ──
+    async function loadLogs() {
+      const level = document.getElementById('logLevel')?.value;
+      const source = document.getElementById('logSource')?.value;
+
+      let query = sb.from('system_logs').select('*').order('created_at', { ascending: false }).limit(200);
+      if (level) query = query.eq('level', level);
+      if (source) query = query.eq('source', source);
+
+      const { data } = await query;
+      const tbody = document.getElementById('logsBody');
+
+      if (!data?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:32px;">Log yok</td></tr>';
+        return;
+      }
+
+      const lvlMap = { CRITICAL: 'tag-danger', ERROR: 'tag-danger', WARNING: 'tag-warn', INFO: 'tag-info' };
+      tbody.innerHTML = data.map(l => `
+        <tr>
+          <td class="mono" style="font-size:11px;">${formatDateFull(l.created_at)}</td>
+          <td><span class="tag ${lvlMap[l.level] || 'tag-info'}">${l.level}</span></td>
+          <td class="mono" style="font-size:12px;">${l.source}</td>
+          <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;font-size:12px;">${l.message}</td>
+          <td class="ip-cell">${l.ip_address || '—'}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ── Devices ──
+    async function loadDevices() {
+      const { data } = await sb.from('devices').select('*').order('device_id');
+      const tbody = document.getElementById('devicesBody');
+
+      if (!data?.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t4);padding:32px;">Cihaz yok</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(d => `
+        <tr>
+          <td class="mono" style="font-weight:500;color:var(--t1);">${d.device_id}</td>
+          <td>${d.name || '—'}</td>
+          <td class="mono" style="font-size:12px;">${d.device_type}</td>
+          <td class="mono" style="font-size:12px;">${d.firmware_version || '—'}</td>
+          <td class="mono" style="font-size:12px;">${d.last_seen ? timeAgo(d.last_seen) : 'hiç'}</td>
+          <td><span class="tag ${d.is_active ? (isOnline(d.last_seen) ? 'tag-ok' : 'tag-warn') : 'tag-offline'}">${d.is_active ? (isOnline(d.last_seen) ? 'Çevrimiçi' : 'Çevrimdışı') : 'Devre dışı'}</span></td>
+          <td><code class="mono" style="font-size:11px;color:var(--t4);cursor:pointer;" onclick="copyKey('${d.api_key}')" title="Kopyalamak için tıkla">${d.api_key ? d.api_key.substring(0, 16) + '...' : '—'}</code></td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick="toggleDevice('${d.device_id}', ${!d.is_active})" style="font-size:11px;">
+              ${d.is_active ? 'Devre Dışı' : 'Aktif Et'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function copyKey(key) {
+      if (!key) return;
+      navigator.clipboard.writeText(key).then(() => showToast('API Key kopyalandı!', 'success'));
+    }
+
+    async function toggleDevice(deviceId, newState) {
+      const { error } = await sb.from('devices').update({ is_active: newState }).eq('device_id', deviceId);
+      if (error) { showToast('Hata: ' + error.message, 'error'); return; }
+      showToast(`${deviceId} ${newState ? 'aktif edildi' : 'devre dışı bırakıldı'}`, 'success');
+      loadDevices();
+    }
+
+    loadPageData();
+    setInterval(loadPageData, 30000);
+  </script>
+</body>
+</html>

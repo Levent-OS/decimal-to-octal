@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sağlık — Developardus IoT</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+</head>
+<body>
+  <div class="shell">
+    <div id="sidebarMount"></div>
+    <div class="main">
+      <div id="topbarMount"></div>
+      <div class="content">
+
+        <!-- Status Strip -->
+        <div class="stats-grid fade-in">
+          <div class="stat-box accent" id="svcSupabase">
+            <div class="stat-label">Supabase</div>
+            <div class="stat-value" style="font-size:18px;">—</div>
+            <div class="stat-sub">veritabanı</div>
+          </div>
+          <div class="stat-box info" id="svcVercel">
+            <div class="stat-label">Vercel API</div>
+            <div class="stat-value" style="font-size:18px;">—</div>
+            <div class="stat-sub">sunucu</div>
+          </div>
+          <div class="stat-box accent" id="svcDevices">
+            <div class="stat-label">Cihazlar</div>
+            <div class="stat-value" id="healthDevices">—</div>
+            <div class="stat-sub" id="healthDevicesSub">aktif</div>
+          </div>
+          <div class="stat-box warn" id="svcAlerts">
+            <div class="stat-label">Aktif Alarm</div>
+            <div class="stat-value" id="healthAlerts">—</div>
+            <div class="stat-sub">onay bekliyor</div>
+          </div>
+        </div>
+
+        <!-- Storage & DB Stats -->
+        <div class="grid-2 fade-in stagger-1" style="margin-bottom:20px;">
+          <div class="card">
+            <div class="card-header"><div class="card-title">🗃 Veritabanı İstatistikleri</div></div>
+            <div class="card-body" id="dbStatsArea">
+              <div class="empty"><p>Yükleniyor...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🧹 Veri Temizliği</div>
+              <button class="btn btn-danger btn-sm" onclick="runCleanup()">Temizliği Çalıştır</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:13px;color:var(--t3);margin-bottom:16px;">
+                90 günden eski okumalar, 30 günden eski loglar ve onaylanmış alarmlar silinir.
+              </p>
+              <div id="cleanupResult"></div>
+
+              <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+                <div class="stat-label" style="margin-bottom:8px;">Veri Aralığı</div>
+                <div class="mono" style="font-size:13px;color:var(--t2);" id="dataRange">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Log -->
+        <div class="card fade-in stagger-2">
+          <div class="card-header">
+            <div class="card-title">🔴 Son Hatalar</div>
+          </div>
+          <div class="card-body no-pad">
+            <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+              <table>
+                <thead><tr><th>Zaman</th><th>Seviye</th><th>Kaynak</th><th>Mesaj</th><th>IP</th></tr></thead>
+                <tbody id="errorsBody">
+                  <tr><td colspan="5" style="text-align:center;color:var(--t4);padding:24px;">Yükleniyor...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="globalToast"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    if (!initPage('health', 'Sağlık İzleme')) throw 'auth';
+
+    async function loadPageData() {
+      await Promise.all([loadHealth(), loadErrors()]);
+    }
+
+    async function loadHealth() {
+      try {
+        // Test Supabase connection
+        const start = Date.now();
+        const { count: readingsCount, error: sbErr } = await sb.from('readings').select('*', { count: 'exact', head: true });
+        const sbLatency = Date.now() - start;
+
+        const sbBox = document.getElementById('svcSupabase');
+        if (sbErr) {
+          sbBox.querySelector('.stat-value').textContent = 'HATA';
+          sbBox.querySelector('.stat-value').style.color = 'var(--danger)';
+        } else {
+          sbBox.querySelector('.stat-value').textContent = 'Bağlı';
+          sbBox.querySelector('.stat-value').style.color = 'var(--ok)';
+          sbBox.querySelector('.stat-sub').textContent = `${sbLatency}ms latency`;
+        }
+
+        // Test Vercel API
+        const apiStart = Date.now();
+        const healthRes = await fetch('/api/health');
+        const apiLatency = Date.now() - apiStart;
+        const healthData = await healthRes.json();
+
+        const apiBox = document.getElementById('svcVercel');
+        if (healthRes.ok) {
+          apiBox.querySelector('.stat-value').textContent = 'Çalışıyor';
+          apiBox.querySelector('.stat-value').style.color = 'var(--ok)';
+          apiBox.querySelector('.stat-sub').textContent = `${apiLatency}ms latency`;
+        } else {
+          apiBox.querySelector('.stat-value').textContent = 'HATA';
+          apiBox.querySelector('.stat-value').style.color = 'var(--danger)';
+        }
+
+        document.getElementById('healthDevices').textContent = healthData.active_devices || 0;
+        document.getElementById('healthDevicesSub').textContent = `${healthData.offline_devices?.length || 0} çevrimdışı`;
+        document.getElementById('healthAlerts').textContent = healthData.active_alerts || 0;
+
+        // DB Stats
+        const stats = healthData.stats || {};
+        document.getElementById('dbStatsArea').innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div><div class="stat-label">Toplam Okuma</div><div class="mono" style="font-size:20px;color:var(--t1);margin-top:4px;">${(stats.readings_count || 0).toLocaleString('tr-TR')}</div></div>
+            <div><div class="stat-label">Bugünkü Okuma</div><div class="mono" style="font-size:20px;color:var(--t1);margin-top:4px;">${(stats.readings_today || 0).toLocaleString('tr-TR')}</div></div>
+            <div><div class="stat-label">Cihaz Sayısı</div><div class="mono" style="font-size:20px;color:var(--t1);margin-top:4px;">${stats.devices_count || 0}</div></div>
+            <div><div class="stat-label">Log Sayısı</div><div class="mono" style="font-size:20px;color:var(--t1);margin-top:4px;">${(stats.logs_count || 0).toLocaleString('tr-TR')}</div></div>
+          </div>
+        `;
+
+        const oldest = stats.oldest_reading ? formatDateFull(stats.oldest_reading) : '—';
+        const newest = stats.newest_reading ? formatDateFull(stats.newest_reading) : '—';
+        document.getElementById('dataRange').textContent = `${oldest}  →  ${newest}`;
+
+      } catch (e) {
+        console.error('Health error:', e);
+      }
+    }
+
+    async function loadErrors() {
+      const { data } = await sb.from('system_logs').select('*').in('level', ['ERROR', 'CRITICAL', 'WARNING']).order('created_at', { ascending: false }).limit(50);
+      const tbody = document.getElementById('errorsBody');
+
+      if (!data?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t4);padding:24px;">Hata kaydı yok ✓</td></tr>';
+        return;
+      }
+
+      const lvlMap = { CRITICAL: 'tag-danger', ERROR: 'tag-danger', WARNING: 'tag-warn', INFO: 'tag-info' };
+      tbody.innerHTML = data.map(l => `
+        <tr>
+          <td class="mono" style="font-size:12px;">${formatDate(l.created_at)}</td>
+          <td><span class="tag ${lvlMap[l.level] || 'tag-info'}">${l.level}</span></td>
+          <td class="mono" style="font-size:12px;">${l.source}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;font-size:12px;">${l.message}</td>
+          <td class="mono ip-cell">${l.ip_address || '—'}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function runCleanup() {
+      try {
+        const { data, error } = await sb.rpc('cleanup_old_data');
+        if (error) throw error;
+        document.getElementById('cleanupResult').innerHTML = `
+          <div class="tag tag-ok" style="padding:8px 14px;">
+            ✓ ${data.readings_deleted} okuma, ${data.logs_deleted} log, ${data.alerts_deleted} alarm silindi.
+          </div>`;
+        showToast('Temizlik tamamlandı!', 'success');
+        loadPageData();
+      } catch (e) {
+        showToast('Temizlik hatası: ' + e.message, 'error');
+      }
+    }
+
+    loadPageData();
+    setInterval(loadPageData, 30000);
+  </script>
+</body>
+</html>
